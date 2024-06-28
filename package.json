@@ -6,12 +6,11 @@
   "author": "--replace <tejumoladavid@gmail.com>",
   "license": "MIT",
   "scripts": {
-    "start": "nodemon --watch 'src/**/*.ts' --exec 'ts-node' src/index.ts"
+    "start": "node src/index.js"
   },
   "devDependencies": {
     "@types/node": "^20.14.9",
-    "nodemon": "^3.1.4",
     "typescript": "^5.5.2",
-    "ts-node": "^10.9.2"
+    "nodemon": "^3.1.4"
   }
 }

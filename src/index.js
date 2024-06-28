@@ -1,13 +1,4 @@
-import shiftsJson from './shifts.json';
-
-
-interface Shift {
-    ShiftID: number
-    EmployeeID: number
-    StartTime: string
-    EndTime: string
-}
-
+const shiftsJson = require('./shifts.json');
 // TODO
 // 1. Split a continous shift into weeks 
 // 2. Group shifts by employee id thats falls between start and end of week (to get shifts for a particular week)
@@ -16,8 +7,9 @@ interface Shift {
 // 4 Bonus: handle day light savings
 
 const DAYS_IN_WEEK = 7;
+const MAX_HOURS_PER_WEEK = 40;
 
-function getStartOfWeek(_date: Date) {
+function getStartOfWeek(_date) {
     const date = new Date(_date);
     const dateOfMonth = date.getDate()
     const dayOfWeek = date.getDay()
@@ -30,7 +22,7 @@ function getStartOfWeek(_date: Date) {
     return startOfWeek;
 }
 
-function getEndOfWeek(_date: Date) {
+function getEndOfWeek(_date) {
     const date = new Date(_date);
     const dateOfMonth = date.getDate()
     const dayOfWeek = date.getDay()
@@ -43,8 +35,8 @@ function getEndOfWeek(_date: Date) {
     return startOfWeek;
 }
 
-function splitShiftsIntoWeeks(data: Shift[]) {
-    const groupShiftsByWeek: { [week: string]: Shift[] } = {};
+function splitShiftsIntoWeeks(data) {
+    const groupShiftsByWeek = {};
 
     data.forEach((shift) => {
         let startTime = new Date(shift.StartTime);
@@ -66,7 +58,6 @@ function splitShiftsIntoWeeks(data: Shift[]) {
             }
             groupShiftsByWeek[key].push(firstPart)
 
-
             const startOfSecondPartShift = getStartOfWeek(endTime);
             const secondPartKey = startOfSecondPartShift.toISOString().split('T')[0];
             const secondPart = {
@@ -74,7 +65,7 @@ function splitShiftsIntoWeeks(data: Shift[]) {
                 StartTime: startOfSecondPartShift.toDateString()
             }
             groupShiftsByWeek[secondPartKey].push(secondPart)
-            
+
         } else {
             groupShiftsByWeek[key].push(shift)
         }
@@ -82,10 +73,48 @@ function splitShiftsIntoWeeks(data: Shift[]) {
     return groupShiftsByWeek
 }
 
-function getShiftSummary() {
-    const data: Shift[] = shiftsJson
+function getEmployeeShiftsForWeek(shifts, week) { 
+    return shifts.reduce((acc, shift) => { 
+        if (!acc[shift.EmployeeID]) {
+            acc[shift.EmployeeID] = {}
+        } else {
+            const start = new Date(shift.StartTime)
+            const end = new Date(shift.EndTime)
+            const hours = (end.getTime() - start.getTime()) / 1000 / 60 / 60
+  
+            const accRegularHours = acc[shift.EmployeeID].RegularHours ?? 0
+            const totalHours = accRegularHours + hours
+
+            const regularHours = totalHours > MAX_HOURS_PER_WEEK ? MAX_HOURS_PER_WEEK : accRegularHours + hours 
+            const overtimeHours = totalHours > MAX_HOURS_PER_WEEK ? totalHours - MAX_HOURS_PER_WEEK : 0
+
+            acc[shift.EmployeeID] = {
+                "EmployeeID": shift.EmployeeID,
+                "StartOfWeek": week,
+                "RegularHours": regularHours,
+                "OvertimeHours": overtimeHours
+            }
+        }
+        return acc
+    }, {})
+}
+
+
+function getShiftSummary(data = shiftsJson) {
     const shifts = splitShiftsIntoWeeks(data);
-    console.log(shifts)
+    
+    const result = Object.keys(shifts).reduce((acc, week) => {
+        const weekShifts = shifts[week];
+        const employeeShifts = getEmployeeShiftsForWeek(weekShifts, week);
+
+        if (Object.keys(employeeShifts).length === 0) {
+            return acc
+        }
+
+        acc.push(...Object.values(employeeShifts))
+        return acc
+    }, []);
+    return result
 }
 
 
