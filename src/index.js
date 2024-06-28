@@ -1,4 +1,4 @@
-const shiftsJson = require('./shifts.json');
+const shiftsJson = require('./shifts.json')
 // TODO
 // 1. Split a continous shift into weeks 
 // 2. Group shifts by employee id thats falls between start and end of week (to get shifts for a particular week)
@@ -73,30 +73,28 @@ function splitShiftsIntoWeeks(data) {
     return groupShiftsByWeek
 }
 
-function getEmployeeShiftsForWeek(shifts, week) { 
-    return shifts.reduce((acc, shift) => { 
-        if (!acc[shift.EmployeeID]) {
-            acc[shift.EmployeeID] = {}
+function getEmployeeShiftsForWeek(shifts, week) {
+    return shifts.reduce((acc, shift) => {
+        const start = new Date(shift.StartTime);
+        const end = new Date(shift.EndTime);
+        const hours = (end - start) / 1000 / 60 / 60;
+
+        const totalHours = acc.RegularHours + hours;
+        const regularHours = Math.min(totalHours, MAX_HOURS_PER_WEEK);
+        const overtimeHours = totalHours > MAX_HOURS_PER_WEEK ? totalHours - MAX_HOURS_PER_WEEK : 0;
+
+        if (!acc.EmployeeID) {
+            acc.EmployeeID = shift.EmployeeID;
+            acc.StartOfWeek = week;
+            acc.RegularHours = regularHours;
+            acc.OvertimeHours = overtimeHours;
         } else {
-            const start = new Date(shift.StartTime)
-            const end = new Date(shift.EndTime)
-            const hours = (end.getTime() - start.getTime()) / 1000 / 60 / 60
-  
-            const accRegularHours = acc[shift.EmployeeID].RegularHours ?? 0
-            const totalHours = accRegularHours + hours
-
-            const regularHours = totalHours > MAX_HOURS_PER_WEEK ? MAX_HOURS_PER_WEEK : accRegularHours + hours 
-            const overtimeHours = totalHours > MAX_HOURS_PER_WEEK ? totalHours - MAX_HOURS_PER_WEEK : 0
-
-            acc[shift.EmployeeID] = {
-                "EmployeeID": shift.EmployeeID,
-                "StartOfWeek": week,
-                "RegularHours": regularHours,
-                "OvertimeHours": overtimeHours
-            }
+            acc.RegularHours += regularHours;
+            acc.OvertimeHours += overtimeHours;
         }
-        return acc
-    }, {})
+
+        return acc;
+    }, { RegularHours: 0, OvertimeHours: 0 });
 }
 
 
@@ -105,17 +103,24 @@ function getShiftSummary(data = shiftsJson) {
     
     const result = Object.keys(shifts).reduce((acc, week) => {
         const weekShifts = shifts[week];
-        const employeeShifts = getEmployeeShiftsForWeek(weekShifts, week);
+        const employeeShifts = weekShifts.reduce((empAcc, shift) => {
+            const empShift = getEmployeeShiftsForWeek([shift], week);
+            if (empShift.EmployeeID) {
+                empAcc.push(empShift);
+            }
+            return empAcc;
+        }, []);
 
-        if (Object.keys(employeeShifts).length === 0) {
-            return acc
-        }
-
-        acc.push(...Object.values(employeeShifts))
-        return acc
+        acc.push(...employeeShifts);
+        return acc;
     }, []);
-    return result
+    console.log(result);
+    return result;
 }
 
+module.exports = {
+    splitShiftsIntoWeeks,
+    getShiftSummary
+};
 
-getShiftSummary()
+// getShiftSummary()
