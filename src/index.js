@@ -1,4 +1,5 @@
-const shiftsJson = require('./shifts.json')
+import shiftsData from './shifts.json' assert { type: 'json' };
+
 // TODO
 // 1. Split a continous shift into weeks 
 // 2. Group shifts by employee id thats falls between start and end of week (to get shifts for a particular week)
@@ -11,116 +12,112 @@ const MAX_HOURS_PER_WEEK = 40;
 
 function getStartOfWeek(_date) {
     const date = new Date(_date);
-    const dateOfMonth = date.getDate()
-    const dayOfWeek = date.getDay()
+    const dateOfMonth = date.getUTCDate()
+    const dayOfWeek = date.getUTCDay()
 
-    const diff = (dayOfWeek + DAYS_IN_WEEK) % DAYS_IN_WEEK;
+    const diff = (dayOfWeek + DAYS_IN_WEEK) % DAYS_IN_WEEK
+ 
+    const startOfWeek = new Date(date);
+    startOfWeek.setUTCDate(dateOfMonth - diff);
+    startOfWeek.setUTCHours(0, 0, 0, 0);
 
-    const startOfWeek = date;
-    startOfWeek.setDate(dateOfMonth - diff);
-    startOfWeek.setHours(0, 0, 0, 0);
     return startOfWeek;
 }
 
 function getEndOfWeek(_date) {
     const date = new Date(_date);
-    const dateOfMonth = date.getDate()
-    const dayOfWeek = date.getDay()
+    const dateOfMonth = date.getUTCDate()
+    const dayOfWeek = date.getUTCDay()
 
     const diff = 6 - dayOfWeek
 
-    const startOfWeek = date;
-    startOfWeek.setDate(dateOfMonth + diff);
-    startOfWeek.setHours(23, 59, 59, 999);
-    return startOfWeek;
+    const endOfWeek = new Date(date);
+    endOfWeek.setUTCDate(dateOfMonth + diff);
+    endOfWeek.setUTCHours(23, 59, 59, 999);
+
+    return endOfWeek;
 }
 
-function splitShiftsIntoWeeks(data) {
-    const groupShiftsByWeek = {};
+export function splitShiftsIntoWeeks(data) {
+    const shifts = []
 
     data.forEach((shift) => {
         let startTime = new Date(shift.StartTime);
-        let endTime = new Date(shift.EndTime);
+        let endTime = new Date(shift.EndTime)
 
-        const startOfWeek = getStartOfWeek(startTime)
-        const endOfWeek = getEndOfWeek(endTime);
-
-        const key = startOfWeek.toISOString().split('T')[0];
-
-        if (!groupShiftsByWeek[key]) {
-            groupShiftsByWeek[key] = [];
+        if (startTime > endTime) {
+            throw new Error(`Invalid shift: ${shift.ShiftID} - Start time is greater than end time`)
         }
 
+        let endOfWeek = getEndOfWeek(startTime);
+
+        shifts.push({
+            ...shift,
+            StartTime: startTime.toISOString(),
+            EndTime: (endTime > endOfWeek ? endOfWeek : endTime).toISOString()
+        });
+        
         if (endTime > endOfWeek) {
-            const firstPart = {
-                ...shift,
-                "EndTime": endOfWeek.toDateString()
-            }
-            groupShiftsByWeek[key].push(firstPart)
 
-            const startOfSecondPartShift = getStartOfWeek(endTime);
-            const secondPartKey = startOfSecondPartShift.toISOString().split('T')[0];
-            const secondPart = {
-                ...shift,
-                StartTime: startOfSecondPartShift.toDateString()
-            }
-            groupShiftsByWeek[secondPartKey].push(secondPart)
+            startTime = getStartOfWeek(endTime);
 
-        } else {
-            groupShiftsByWeek[key].push(shift)
-        }
+            shifts.push({
+                ...shift,
+                StartTime: startTime.toISOString(),
+                EndTime: endTime.toISOString()
+            });
+         }
+
     });
-    return groupShiftsByWeek
+    return shifts
 }
 
-function getEmployeeShiftsForWeek(shifts, week) {
-    return shifts.reduce((acc, shift) => {
+export function getShiftSummary(data = shiftsData) {
+    const shifts = splitShiftsIntoWeeks(data);
+    const sortedShifts = shifts.sort((a, b) => new Date(a.StartTime) - new Date(b.StartTime));
+
+
+    const summary = sortedShifts.reduce((acc, shift, currentIndex, shifts) => { 
+        const week = getStartOfWeek(shift.EndTime).toISOString().split('T')[0];
+        const key = `${shift.EmployeeID}-${week}`;
+
+        if (!acc[key]) {
+            acc[key] = []
+        }
+
         const start = new Date(shift.StartTime);
         const end = new Date(shift.EndTime);
         const hours = (end - start) / 1000 / 60 / 60;
 
-        const totalHours = acc.RegularHours + hours;
+        const nextShift = shifts[currentIndex + 1];
+        const isInvalid = nextShift &&
+            end > new Date(nextShift.StartTime) &&
+            start < new Date(nextShift.EndTime) &&
+            (shift.EmployeeID === nextShift.EmployeeID);
+        console.log(isInvalid, shift.ShiftID, nextShift?.ShiftID)
+
+        const totalHours = isInvalid ? (acc[key].RegularHours ?? 0) : (acc[key].RegularHours ?? 0) + hours;
         const regularHours = Math.min(totalHours, MAX_HOURS_PER_WEEK);
         const overtimeHours = totalHours > MAX_HOURS_PER_WEEK ? totalHours - MAX_HOURS_PER_WEEK : 0;
+        const invalidShifts = (acc[key].InvalidShifts ?? [])
 
-        if (!acc.EmployeeID) {
-            acc.EmployeeID = shift.EmployeeID;
-            acc.StartOfWeek = week;
-            acc.RegularHours = regularHours;
-            acc.OvertimeHours = overtimeHours;
-        } else {
-            acc.RegularHours += regularHours;
-            acc.OvertimeHours += overtimeHours;
+        if (isInvalid) {
+            invalidShifts.includes(shift.ShiftID) || invalidShifts.push(shift.ShiftID)
+            invalidShifts.includes(nextShift.ShiftID) || invalidShifts.push(nextShift.ShiftID)
+        } 
+
+        acc[key] = {
+            EmployeeID: shift.EmployeeID,
+            StartOfWeek: week,
+            RegularHours: regularHours,
+            OvertimeHours: overtimeHours,
+            InvalidShifts: invalidShifts
         }
 
         return acc;
-    }, { RegularHours: 0, OvertimeHours: 0 });
+    }, {});
+
+    return Object.values(summary).flat();
 }
 
-
-function getShiftSummary(data = shiftsJson) {
-    const shifts = splitShiftsIntoWeeks(data);
-    
-    const result = Object.keys(shifts).reduce((acc, week) => {
-        const weekShifts = shifts[week];
-        const employeeShifts = weekShifts.reduce((empAcc, shift) => {
-            const empShift = getEmployeeShiftsForWeek([shift], week);
-            if (empShift.EmployeeID) {
-                empAcc.push(empShift);
-            }
-            return empAcc;
-        }, []);
-
-        acc.push(...employeeShifts);
-        return acc;
-    }, []);
-    console.log(result);
-    return result;
-}
-
-module.exports = {
-    splitShiftsIntoWeeks,
-    getShiftSummary
-};
-
-// getShiftSummary()
+console.log(getShiftSummary());

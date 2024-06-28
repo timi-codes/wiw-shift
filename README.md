@@ -18,5 +18,5 @@
 
 # Area of improvement
  - Test all utility functions
- - improve the split shift function to be recursive till end date is exhausted.
- - Handle day shift and overlapping dates
+ - improve the split shift time complexity
+ - Handle day light savings and invalid dates

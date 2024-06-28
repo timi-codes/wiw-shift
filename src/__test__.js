@@ -1,49 +1,92 @@
-const { expect } = require('chai').default;
-const { splitShiftsIntoWeeks, getShiftSummary } = require('./index.js');
+import { expect } from 'chai';
+import { splitShiftsIntoWeeks, getShiftSummary } from './index.js';
+
+const testData = [
+    {
+        ShiftID: 1,
+        EmployeeID: 1,
+        StartTime: '2024-06-01T08:00:00Z',
+        EndTime: '2024-06-01T17:00:00Z'
+    },
+    {
+        ShiftID: 2,
+        EmployeeID: 2,
+        StartTime: '2024-06-03T09:00:00Z',
+        EndTime: '2024-06-03T18:00:00Z'
+    },
+    {
+        ShiftID: 3,
+        EmployeeID: 2,
+        StartTime: '2024-06-03T12:00:00Z',
+        EndTime: '2024-06-03T18:00:00Z'
+    },
+    {
+        ShiftID: 4,
+        EmployeeID: 2,
+        StartTime: '2024-06-03T12:00:00Z',
+        EndTime: '2024-06-03T20:00:00Z'
+    },
+    {
+        ShiftID: 5,
+        EmployeeID: 1,
+        StartTime: '2024-06-11T07:00:00Z',
+        EndTime: '2024-06-11T20:00:00Z'
+    },
+    {
+        ShiftID: 6,
+        EmployeeID: 1,
+        StartTime: '2024-06-12T09:00:00Z',
+        EndTime: '2024-06-12T17:00:00Z'
+    },
+    {
+        ShiftID: 7,
+        EmployeeID: 1,
+        StartTime: '2024-06-13T10:00:00Z',
+        EndTime: '2024-06-13T23:00:00Z'
+    },
+    {
+        ShiftID: 8,
+        EmployeeID: 1,
+        StartTime: '2024-06-14T10:00:00Z',
+        EndTime: '2024-06-14T17:00:00Z'
+    },
+    {
+        ShiftID: 9,
+        EmployeeID: 1,
+        StartTime: '2024-06-15T17:00:00Z',
+        EndTime: '2024-06-16T03:00:00Z' // This shift spans two weeks
+    }
+]
 
 describe('Shift', () => {
-    const shiftsData = [
-        {
-            EmployeeID: 1,
-            StartTime: '2024-06-01T08:00:00Z',
-            EndTime: '2024-06-01T17:00:00Z'
-        },
-        {
-            EmployeeID: 2,
-            StartTime: '2024-06-03T09:00:00Z',
-            EndTime: '2024-06-03T18:00:00Z'
-        },
-        {
-            EmployeeID: 1,
-            StartTime: '2024-06-07T07:00:00Z',
-            EndTime: '2024-06-07T16:00:00Z'
-        }
-    ];
 
     describe('splitShiftsIntoWeeks', () => {
-        it('should split shifts into weeks correctly', () => {
-            const result = splitShiftsIntoWeeks(shiftsData);
+        it('should split shifts spanning two weeks correctly', () => {
+            const result = splitShiftsIntoWeeks(testData);
 
-            expect(result['2024-05-26']).to.be.an('array').with.lengthOf(1);
-            expect(result['2024-06-02']).to.be.an('array').with.lengthOf(1);
-            expect(result['2024-06-09']).to.be.an('array').with.lengthOf(1);
+            expect(result).lengthOf(10);
+
+            const shift3 = result.filter(shift => shift.ShiftID === 9);
+            expect(shift3).lengthOf(2);
+            expect(shift3[0].StartTime).to.equal('2024-06-15T17:00:00.000Z');
+            expect(shift3[0].EndTime).to.equal('2024-06-15T23:59:59.999Z');
+            expect(shift3[1].StartTime).to.equal('2024-06-16T00:00:00.000Z');
+            expect(shift3[1].EndTime).to.equal('2024-06-16T03:00:00.000Z');
         });
     });
 
     describe('getShiftSummary', () => {
         it('should calculate shift summary correctly', () => {
-            const result = getShiftSummary(shiftsData);
-
-
-            expect(result).to.be.an('array').with.lengthOf(2);
-
-            const firstEmployeeSummary = result.find(summary => summary.EmployeeID === 1);
-            expect(firstEmployeeSummary.RegularHours).to.equal(18); 
-            expect(firstEmployeeSummary.OvertimeHours).to.equal(0);
-
-            const secondEmployeeSummary = result.find(summary => summary.EmployeeID === 2);
-            expect(secondEmployeeSummary.RegularHours).to.equal(9);
-            expect(secondEmployeeSummary.OvertimeHours).to.equal(0);
+            const result = getShiftSummary(testData);
+            console.log(result)
+            expect(result).lengthOf(4);
+            expect(result[2]).to.deep.equal({
+                EmployeeID: 1,
+                StartOfWeek: '2024-06-09',
+                RegularHours: 40,
+                OvertimeHours: 6.9999997222222206,
+                InvalidShifts: []
+            });
         });
     });
 });
